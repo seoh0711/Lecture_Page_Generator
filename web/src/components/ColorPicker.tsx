@@ -6,6 +6,9 @@ interface Props {
   value: string
   onChange: (color: string) => void
   disabled?: boolean
+  hasTemplate?: boolean
+  keepTemplateColor?: boolean
+  onKeepTemplateColorChange?: (keep: boolean) => void
 }
 
 const PRESETS = [
@@ -25,8 +28,9 @@ function isValidHex(str: string) {
   return /^#[0-9A-Fa-f]{6}$/.test(str)
 }
 
-export default function ColorPicker({ value, onChange, disabled }: Props) {
+export default function ColorPicker({ value, onChange, disabled, hasTemplate, keepTemplateColor, onKeepTemplateColorChange }: Props) {
   const [inputVal, setInputVal] = useState(value)
+  const pickerDisabled = disabled || keepTemplateColor
 
   const handlePreset = (color: string) => {
     setInputVal(color)
@@ -45,9 +49,39 @@ export default function ColorPicker({ value, onChange, disabled }: Props) {
   }
 
   return (
-    <div className={`space-y-4 ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+    <div className="space-y-4">
+      {/* Template color keep toggle — only shown when template is uploaded */}
+      {hasTemplate && onKeepTemplateColorChange && (
+        <label className={`flex items-center gap-3 px-4 py-3 rounded-xl border cursor-pointer transition-colors select-none
+          ${keepTemplateColor
+            ? 'bg-purple-50 border-purple-200'
+            : 'bg-gray-50 border-gray-200 hover:border-purple-200'
+          } ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className={`relative w-10 h-6 rounded-full transition-colors flex-shrink-0
+            ${keepTemplateColor ? 'bg-purple-500' : 'bg-gray-300'}`}>
+            <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-transform
+              ${keepTemplateColor ? 'translate-x-5' : 'translate-x-1'}`} />
+          </div>
+          <input
+            type="checkbox"
+            className="sr-only"
+            checked={!!keepTemplateColor}
+            onChange={(e) => onKeepTemplateColorChange(e.target.checked)}
+            disabled={disabled}
+          />
+          <div>
+            <p className={`text-sm font-semibold ${keepTemplateColor ? 'text-purple-700' : 'text-gray-700'}`}>
+              템플릿 컬러 유지
+            </p>
+            <p className="text-xs text-gray-400">
+              업로드된 템플릿의 원본 색상을 그대로 사용합니다
+            </p>
+          </div>
+        </label>
+      )}
+
       {/* Preset swatches */}
-      <div>
+      <div className={pickerDisabled ? 'opacity-40 pointer-events-none' : ''}>
         <p className="text-xs text-gray-500 mb-2 font-medium">프리셋 색상</p>
         <div className="flex flex-wrap gap-2">
           {PRESETS.map(({ color, label }) => (
@@ -70,7 +104,7 @@ export default function ColorPicker({ value, onChange, disabled }: Props) {
       </div>
 
       {/* Custom input row */}
-      <div>
+      <div className={pickerDisabled ? 'opacity-40 pointer-events-none' : ''}>
         <p className="text-xs text-gray-500 mb-2 font-medium">직접 입력</p>
         <div className="flex items-center gap-3">
           <input

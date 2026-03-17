@@ -695,3 +695,250 @@ Inner layout: align-items:center;display:flex;flex-direction:column;gap:40px;wid
 - All text content must come from the analysis data — do NOT invent or paraphrase content.
 - Include ALL chapters from analysis.curriculum.chapters.`
 }
+
+
+/* ================================================================
+   TEMPLATE ANALYZE PROMPT
+   목표: 섹션별 콘텐츠 슬롯 매핑 — "어디에 무엇을 채울지" 가이드 추출
+   ================================================================ */
+export function buildTemplateAnalyzePrompt(html: string): string {
+  return `You are an expert web developer. Analyze the following HTML template and produce a CONTENT MAPPING GUIDE.
+
+This guide will be used to fill the template with new lecture data. Focus entirely on WHAT CONTENT goes WHERE — not on describing the design.
+
+## HTML TEMPLATE
+${html}
+
+## TASK
+For every section in the template (in order), identify:
+1. What the section is for (purpose)
+2. Which lecture data fields should populate it
+3. How many repeated items/cards/rows the section has (count exactly from the template)
+4. Any special text patterns (e.g. log prefixes like [ERROR], numbered labels like "01", badges, etc.)
+
+## OUTPUT FORMAT
+
+=== CONTENT MAPPING GUIDE ===
+
+[Section N: <section name>]
+Purpose: <what this section communicates>
+HTML anchor: <CSS class or element that identifies this section, e.g. "header.hero" or "section.pain-points-section">
+Content source: <which analysis field(s) to use, e.g. "analysis.hero.tagline", "analysis.pain_points.items">
+Item count: <exact number of repeated cards/rows/items currently in the template>
+Text pattern: <any special labels, prefixes, or numbering to preserve, e.g. "[ERROR]", "POINT 01", card-number "01">
+Notes: <anything special about how content maps, e.g. "h1 uses analysis.hero.title_line1 + title_line2 on separate lines">
+
+Repeat for ALL sections.
+
+At the end, add:
+
+[PRIMARY COLOR VARIABLE]
+Name: <the CSS variable name for the main action/accent color, e.g. "--primary">
+Glow variable: <the CSS variable name for the glow/shadow of primary, e.g. "--primary-glow">
+Current value: <current hex value>`
+}
+
+/* ================================================================
+   GENERATE WITH TEMPLATE PROMPT
+   목표: 템플릿 HTML을 그대로 복사하고 콘텐츠 + primary 색상만 교체
+   ================================================================ */
+export function buildGenerateWithTemplatePrompt(
+  analysis: LectureAnalysis,
+  palette: ColorPalette,
+  contentMapping: string,
+  fullTemplateHtml: string,
+  keepTemplateColor = false,
+): string {
+  const data = JSON.stringify(analysis, null, 2)
+  const { primary } = palette
+
+  // Derive RGBA version of primary for glow variables
+  const r = parseInt(primary.slice(1, 3), 16)
+  const g = parseInt(primary.slice(3, 5), 16)
+  const b = parseInt(primary.slice(5, 7), 16)
+  const primaryRgba = `rgba(${r}, ${g}, ${b}, 0.4)`
+  const primaryRgbaLight = `rgba(${r}, ${g}, ${b}, 0.15)`
+  const primaryRgbaBorder = `rgba(${r}, ${g}, ${b}, 0.3)`
+
+  const styleBlockRules = keepTemplateColor
+    ? `### STYLE BLOCK RULES
+- Copy the template <style> block VERBATIM into the output — do NOT change any color values at all.
+- DO NOT add new CSS rules
+- DO NOT remove any CSS rules
+- DO NOT rename any CSS class`
+    : `### STYLE BLOCK RULES
+- Copy the template <style> block VERBATIM into the output
+- Make ONLY these changes inside the style block:
+  a. Replace the primary accent color CSS variable value with: ${primary}
+  b. Replace any primary glow/shadow CSS variable value with: ${primaryRgba}
+  c. Replace rgba(primary, 0.15) low-opacity variants with: ${primaryRgbaLight}
+  d. Replace rgba(primary, 0.3) border variants with: ${primaryRgbaBorder}
+- DO NOT change any other color values (backgrounds, text colors, borders stay original)
+- DO NOT add new CSS rules
+- DO NOT remove any CSS rules
+- DO NOT rename any CSS class`
+
+  return `You are an expert web developer performing a FILL-IN-THE-BLANKS task.
+
+You will produce a lecture detail page by:
+1. Copying the template HTML structure EXACTLY
+2. ${keepTemplateColor ? 'Keeping ALL colors exactly as in the template (no color changes)' : 'Replacing ONLY the primary accent color in the CSS variables'}
+3. Replacing ALL text content with the provided lecture data
+
+## STRICT RULES — read carefully before starting
+
+${styleBlockRules}
+
+### HTML STRUCTURE RULES
+- Reproduce EVERY section from the template — do not skip, merge, or add sections
+- For each section, keep the EXACT HTML element structure and nesting
+- Keep all CSS class names exactly as in the template
+- Keep all pseudo-element patterns (::before, ::after) as they are in CSS
+- Keep all interactive patterns (details/summary, hover classes, etc.)
+- Keep all decorative elements (dots, timeline nodes, image placeholders, etc.)
+
+### CONTENT REPLACEMENT RULES
+- Replace text content using the CONTENT MAPPING GUIDE below
+- Keep all HTML tags, class attributes, and structure — only the inner text changes
+- If a section has N repeated items (cards, rows, list entries), generate exactly N items
+  - If the lecture data has more items, take the first N
+  - If the lecture data has fewer items, repeat/expand to fill N
+- For template-specific sections (Projects, Core Points, FAQ, etc.): first check analysis.extra_content for the matching snake_case key. If found, use that data. If not found, infer from analysis.key_highlights or analysis.learning_objectives
+- For FAQ sections: use analysis.extra_content.faq if present, otherwise generate 4 relevant Q&A pairs from the lecture content
+- For image placeholders: keep the placeholder element, replace inner text with a relevant description
+- Update <title> tag to analysis.title
+- Keep the Google Fonts <link> tags from the template
+- All text must be in Korean (translate if needed)
+- word-break: keep-all on all Korean text elements
+
+## CONTENT MAPPING GUIDE
+${contentMapping}
+
+## LECTURE DATA
+${data}
+
+## TEMPLATE HTML (copy this structure exactly)
+${fullTemplateHtml}
+
+## OUTPUT
+Output ONLY the complete HTML document. Start with <!DOCTYPE html>. No markdown fences. No explanation.`
+}
+
+/* ================================================================
+   ANALYZE WITH TEMPLATE PROMPT
+   목표: 템플릿이 요구하는 섹션에 맞춰 TXT에서 콘텐츠 추출
+   표준 LectureAnalysis 필드 + extra_content(템플릿 전용 섹션) 반환
+   ================================================================ */
+export function buildAnalyzeWithTemplatePrompt(
+  content: string,
+  templateContentMapping: string,
+): string {
+  return `You are an expert Korean lecture content analyzer and marketing copywriter.
+Analyze the following lecture content and return a single JSON object.
+
+The output will be used to fill an HTML template page. The template's section requirements are described in the TEMPLATE CONTENT MAPPING below.
+
+LECTURE CONTENT:
+${content}
+
+TEMPLATE CONTENT MAPPING:
+${templateContentMapping}
+
+## EXTRACTION RULES
+1. Extract ALL standard fields (required for quality evaluation loop).
+2. For each section listed in the TEMPLATE CONTENT MAPPING that does NOT map to a standard field,
+   extract the relevant content and store it in "extra_content" under a snake_case key.
+3. Infer any fields not explicitly found in the content from context (topic, difficulty, tone).
+4. All text values must be in Korean unless the original content is in English.
+
+Return ONLY a valid JSON object with this structure. No explanation, no markdown fences.
+
+{
+  "lecture_id": "slug-style-id-based-on-title",
+  "title": "강의 전체 제목",
+  "difficulty": "beginner or intermediate or advanced",
+  "prerequisites": ["선수 지식 1", "선수 지식 2"],
+  "learning_objectives": ["학습 목표 1", "학습 목표 2"],
+  "keywords": ["핵심 키워드 (최대 15개)"],
+
+  "hero": {
+    "badge_text": "강의 특징을 한 줄로 요약한 배지/태그 문구",
+    "title_line1": "임팩트 있는 짧은 제목 첫 번째 줄",
+    "title_line2": "강의 핵심 가치 두 번째 줄",
+    "tagline": "타깃 수강생의 불안·고민을 건드리는 1~2문장 (줄바꿈은 \n)",
+    "image_url": ""
+  },
+
+  "key_highlights": [
+    {
+      "title": "핵심 학습 영역 제목",
+      "description": "한 줄 부제",
+      "sub_items": [
+        { "label": "세부 토픽 태그명", "detail": "세부 토픽 한 문장 설명" }
+      ]
+    }
+  ],
+
+  "book_benefit": {
+    "title": "강의+도서 혜택 안내 문구 (없으면 강의만의 혜택 문구로 대체)",
+    "image_url": ""
+  },
+
+  "pain_points": {
+    "subtitle": "타깃의 현재 고충을 공감하는 2문장 (줄바꿈은 \n)",
+    "items": ["고충 1", "고충 2", "고충 3", "고충 4", "고충 5"]
+  },
+
+  "target_audience": [
+    { "header": "추천 대상 설명", "description": "👉 이 대상에게 주는 구체적인 가치" },
+    { "header": "", "description": "" },
+    { "header": "", "description": "" }
+  ],
+
+  "before_after": {
+    "before_items": ["수강 전 부정적 상태 1줄", "상태 2", "상태 3"],
+    "after_items": ["수강 후 긍정적 변화 1줄", "변화 2", "변화 3"]
+  },
+
+  "instructor": {
+    "name": "강사 이름",
+    "title": "소속 또는 직함",
+    "subtitle": "강사를 표현하는 한 줄 슬로건",
+    "photo_url": "",
+    "career": ["경력 1", "경력 2", "경력 3"],
+    "publications": ["저서명 (출판사, 연도)"]
+  },
+
+  "curriculum": {
+    "total_duration": "총 학습 시간",
+    "total_chapters": 0,
+    "format": "온라인 VOD",
+    "chapters": [
+      { "chapter": "1장. 챕터 제목", "description": "이 챕터에서 배우는 내용 한 줄 요약" }
+    ]
+  },
+
+  "summary": "강의 전체를 2~3문장으로 요약",
+
+  "extra_content": {
+    "section_key_1": [
+      { "field1": "value", "field2": "value" }
+    ],
+    "section_key_2": [
+      { "field1": "value", "field2": "value" }
+    ]
+  }
+}
+
+For "extra_content": add one key per template section that needs non-standard content.
+The key name must exactly match the snake_case section identifier from the TEMPLATE CONTENT MAPPING.
+Each value is an array of objects with fields that make sense for that section's content.
+
+Examples of extra_content sections you may encounter:
+- "projects": [{ "tag": "Sequential Workflow", "title": "프로젝트 명", "description": "설명" }]
+- "core_points": [{ "number": "POINT 01", "title": "포인트 제목", "description": "설명" }]
+- "faq": [{ "q": "질문", "a": "답변" }]
+- "what_you_build": [{ "title": "결과물 제목", "description": "설명" }]
+
+If the TEMPLATE CONTENT MAPPING does not require any extra sections beyond the standard fields, return "extra_content": {}.`
+}

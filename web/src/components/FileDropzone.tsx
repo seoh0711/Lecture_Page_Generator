@@ -1,18 +1,22 @@
 'use client'
 
 import { useCallback, useState, useRef } from 'react'
-import { Upload, X, FileText } from 'lucide-react'
-import type { FileItem } from '@/lib/types'
+import { Upload, X, FileText, FileCode } from 'lucide-react'
+import type { FileItem, TemplateFile } from '@/lib/types'
 
 interface Props {
   files: FileItem[]
   onChange: (files: FileItem[]) => void
   disabled?: boolean
+  templateFile?: TemplateFile | null
+  onTemplateChange?: (file: TemplateFile | null) => void
 }
 
-export default function FileDropzone({ files, onChange, disabled }: Props) {
+export default function FileDropzone({ files, onChange, disabled, templateFile, onTemplateChange }: Props) {
   const [isDragging, setIsDragging] = useState(false)
+  const [isTemplateDragging, setIsTemplateDragging] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const templateInputRef = useRef<HTMLInputElement>(null)
 
   const processFiles = useCallback(
     async (rawFiles: FileList) => {
@@ -50,6 +54,36 @@ export default function FileDropzone({ files, onChange, disabled }: Props) {
   const removeFile = (index: number) => {
     onChange(files.filter((_, i) => i !== index))
   }
+
+  const processTemplate = useCallback(
+    async (rawFiles: FileList) => {
+      if (!onTemplateChange) return
+      const file = Array.from(rawFiles).find(
+        (f) => f.type === 'text/html' || f.name.endsWith('.html') || f.name.endsWith('.htm')
+      )
+      if (file) {
+        const content = await file.text()
+        onTemplateChange({ name: file.name, content, size: file.size })
+      }
+    },
+    [onTemplateChange]
+  )
+
+  const handleTemplateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      processTemplate(e.target.files)
+      e.target.value = ''
+    }
+  }
+
+  const handleTemplateDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsTemplateDragging(false)
+      if (!disabled) processTemplate(e.dataTransfer.files)
+    },
+    [disabled, processTemplate]
+  )
 
   const totalSize = files.reduce((acc, f) => acc + f.size, 0)
 
@@ -119,6 +153,67 @@ export default function FileDropzone({ files, onChange, disabled }: Props) {
               )}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Template upload */}
+      {onTemplateChange && (
+        <div className="pt-1">
+          <p className="text-xs font-medium text-gray-500 mb-2 px-1">
+            HTML 템플릿 <span className="text-gray-400 font-normal">(선택 · 업로드 시 템플릿 UI를 참고해 페이지를 생성합니다)</span>
+          </p>
+
+          {templateFile ? (
+            <div className="flex items-center gap-3 bg-purple-50 border border-purple-100 rounded-lg px-4 py-3">
+              <FileCode size={16} className="text-purple-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-700 truncate">{templateFile.name}</p>
+                <p className="text-xs text-gray-400">{(templateFile.size / 1024).toFixed(1)} KB · HTML 템플릿</p>
+              </div>
+              {!disabled && (
+                <button
+                  onClick={() => onTemplateChange(null)}
+                  className="text-gray-300 hover:text-red-400 transition-colors p-1 rounded"
+                  aria-label="템플릿 제거"
+                >
+                  <X size={15} />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label="HTML 템플릿 업로드"
+              className={`border border-dashed rounded-xl px-5 py-4 text-center transition-all select-none
+                ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                ${
+                  isTemplateDragging
+                    ? 'border-purple-400 bg-purple-50'
+                    : 'border-gray-200 hover:border-purple-300 hover:bg-gray-50'
+                }`}
+              onDragOver={(e) => { e.preventDefault(); if (!disabled) setIsTemplateDragging(true) }}
+              onDragLeave={() => setIsTemplateDragging(false)}
+              onDrop={handleTemplateDrop}
+              onClick={() => { if (!disabled) templateInputRef.current?.click() }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') templateInputRef.current?.click() }}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <FileCode size={16} className="text-purple-400" />
+                <p className="text-gray-500 text-sm">
+                  템플릿 .html 파일을 드래그하거나 클릭해서 업로드
+                </p>
+              </div>
+              <input
+                ref={templateInputRef}
+                type="file"
+                accept=".html,.htm,text/html"
+                className="hidden"
+                onChange={handleTemplateChange}
+                disabled={disabled}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>

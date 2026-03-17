@@ -24,7 +24,7 @@ import {
 import FileDropzone from '@/components/FileDropzone'
 import ColorPicker from '@/components/ColorPicker'
 import ModelSelector from '@/components/ModelSelector'
-import type { FileItem, LectureAnalysis, AppStep, ModelConfig } from '@/lib/types'
+import type { FileItem, TemplateFile, LectureAnalysis, AppStep, ModelConfig } from '@/lib/types'
 
 /* ------------------------------------------------------------------ */
 /* Constants                                                             */
@@ -165,6 +165,8 @@ function EvalTimeline({
 /* ------------------------------------------------------------------ */
 export default function Home() {
   const [files,        setFiles]        = useState<FileItem[]>([])
+  const [templateFile,      setTemplateFile]      = useState<TemplateFile | null>(null)
+  const [keepTemplateColor, setKeepTemplateColor] = useState(false)
   const [primaryColor, setPrimaryColor] = useState('#166EC0')
   const [modelConfig,  setModelConfig]  = useState<ModelConfig>({ provider: 'claude', modelId: 'claude-sonnet-4-6' })
   const [step,         setStep]         = useState<AppStep>('idle')
@@ -216,6 +218,8 @@ export default function Home() {
   /* ---- Reset ---- */
   const handleReset = () => {
     setFiles([])
+    setTemplateFile(null)
+    setKeepTemplateColor(false)
     setStep('idle')
     setAnalysis(null)
     setGeneratedHtml('')
@@ -304,7 +308,7 @@ export default function Home() {
 
     // ── Step 1: Analyze ──────────────────────────────────────────────
     setStep('analyzing')
-    setProgressMsg('강의 내용을 분석하는 중...')
+    setProgressMsg(templateFile ? '템플릿 구조 파악 후 강의 내용을 분석하는 중...' : '강의 내용을 분석하는 중...')
     let currentAnalysis: LectureAnalysis
     try {
       const analyzeRes = await fetch('/api/analyze', {
@@ -313,6 +317,7 @@ export default function Home() {
         body: JSON.stringify({
           files: files.map((f) => ({ name: f.name, content: f.content })),
           modelConfig,
+          ...(templateFile ? { templateHtml: templateFile.content } : {}),
         }),
       })
       if (!analyzeRes.ok) {
@@ -409,12 +414,17 @@ export default function Home() {
     // ── Step 3: Generate ─────────────────────────────────────────────
     setIsImproving(false)
     setStep('generating')
-    setProgressMsg('HTML 페이지를 생성하는 중...')
+    setProgressMsg(templateFile ? '템플릿 분석 후 HTML 페이지를 생성하는 중...' : 'HTML 페이지를 생성하는 중...')
     try {
       const genRes = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ analysis: currentAnalysis, primaryColor, modelConfig }),
+        body: JSON.stringify({
+          analysis: currentAnalysis,
+          primaryColor,
+          modelConfig,
+          ...(templateFile ? { templateHtml: templateFile.content, keepTemplateColor } : {}),
+        }),
       })
       if (!genRes.ok) {
         const body = await genRes.json().catch(() => ({ error: genRes.statusText }))
@@ -532,7 +542,13 @@ export default function Home() {
           <SectionTitle num={1} color={primaryColor}
             title="강의 스크립트 업로드"
             sub="분석할 .txt 파일을 업로드하세요 (여러 파일 가능)" />
-          <FileDropzone files={files} onChange={setFiles} disabled={isProcessing} />
+          <FileDropzone
+            files={files}
+            onChange={setFiles}
+            disabled={isProcessing}
+            templateFile={templateFile}
+            onTemplateChange={(f) => { setTemplateFile(f); if (!f) setKeepTemplateColor(false) }}
+          />
         </section>
 
         {/* ---- Card 2: Color ---- */}
@@ -540,7 +556,14 @@ export default function Home() {
           <SectionTitle num={2} color={primaryColor}
             title="메인 컬러 선택"
             sub="생성될 상세 페이지의 테마 색상을 고르세요" />
-          <ColorPicker value={primaryColor} onChange={setPrimaryColor} disabled={isProcessing} />
+          <ColorPicker
+            value={primaryColor}
+            onChange={setPrimaryColor}
+            disabled={isProcessing}
+            hasTemplate={!!templateFile}
+            keepTemplateColor={keepTemplateColor}
+            onKeepTemplateColorChange={setKeepTemplateColor}
+          />
         </section>
 
         {/* ---- Card 3: Model ---- */}

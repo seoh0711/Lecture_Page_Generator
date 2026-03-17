@@ -4,6 +4,12 @@ export interface FileItem {
   size: number
 }
 
+export interface TemplateFile {
+  name: string
+  content: string
+  size: number
+}
+
 /* ---------- Sub-types ---------- */
 export interface SubItem {
   label: string
@@ -90,6 +96,13 @@ export interface LectureAnalysis {
   /** Section 7 – Curriculum */
   curriculum: Curriculum
   summary: string
+  /**
+   * Template-specific sections not covered by the standard schema.
+   * Populated only when an HTML template is uploaded.
+   * Keys are snake_case section names (e.g. "projects", "core_points", "faq").
+   * Values are arrays of structured objects serialized as JSON strings, or plain strings.
+   */
+  extra_content?: Record<string, unknown[]>
 }
 
 /* ---------- App state types ---------- */

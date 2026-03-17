@@ -1,22 +1,33 @@
 import { NextRequest } from 'next/server'
-import { buildGeneratePrompt } from '@/lib/prompts'
+import { buildGeneratePrompt, buildTemplateAnalyzePrompt, buildGenerateWithTemplatePrompt } from '@/lib/prompts'
 import { buildPalette } from '@/lib/colors'
-import { generateStreamWithAI } from '@/lib/ai'
+import { analyzeWithAI, generateStreamWithAI } from '@/lib/ai'
 import type { LectureAnalysis, ModelConfig } from '@/lib/types'
 
 export const maxDuration = 120
 
 export async function POST(request: NextRequest) {
   try {
-    const { analysis, primaryColor, modelConfig } = await request.json() as {
+    const { analysis, primaryColor, modelConfig, templateHtml, keepTemplateColor } = await request.json() as {
       analysis: LectureAnalysis
       primaryColor: string
       modelConfig?: ModelConfig
+      templateHtml?: string
+      keepTemplateColor?: boolean
     }
 
     const config: ModelConfig = modelConfig ?? { provider: 'claude', modelId: 'claude-sonnet-4-6' }
     const palette = buildPalette(primaryColor)
-    const readable = await generateStreamWithAI(buildGeneratePrompt(analysis, palette), config)
+
+    let prompt: string
+    if (templateHtml && templateHtml.trim().length > 0) {
+      const templateAnalysis = await analyzeWithAI(buildTemplateAnalyzePrompt(templateHtml), config)
+      prompt = buildGenerateWithTemplatePrompt(analysis, palette, templateAnalysis, templateHtml, !!keepTemplateColor)
+    } else {
+      prompt = buildGeneratePrompt(analysis, palette)
+    }
+
+    const readable = await generateStreamWithAI(prompt, config)
 
     return new Response(readable, {
       headers: {
