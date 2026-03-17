@@ -3,7 +3,7 @@ import { buildAnalyzePrompt } from '@/lib/prompts'
 import { analyzeWithAI } from '@/lib/ai'
 import type { ModelConfig } from '@/lib/types'
 
-export const maxDuration = 60
+export const maxDuration = 120
 
 export async function POST(request: NextRequest) {
   try {

@@ -10,7 +10,7 @@ export async function analyzeWithAI(prompt: string, config: ModelConfig): Promis
     const client = new Anthropic()
     const message = await client.messages.create({
       model: config.modelId,
-      max_tokens: 4096,
+      max_tokens: 8192,
       messages: [{ role: 'user', content: prompt }],
     })
     const block = message.content[0]
@@ -40,7 +40,7 @@ export async function generateStreamWithAI(
     const client = new Anthropic()
     const stream = await client.messages.stream({
       model: config.modelId,
-      max_tokens: 8192,
+      max_tokens: 16000,
       messages: [{ role: 'user', content: prompt }],
     })
 

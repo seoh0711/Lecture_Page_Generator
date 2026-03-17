@@ -1,6 +1,5 @@
 import { NextRequest } from 'next/server'
-import { buildGeneratePrompt } from '@/lib/prompts'
-import { buildPalette } from '@/lib/colors'
+import { buildEvaluatePrompt } from '@/lib/prompts'
 import { generateStreamWithAI } from '@/lib/ai'
 import type { LectureAnalysis, ModelConfig } from '@/lib/types'
 
@@ -8,17 +7,22 @@ export const maxDuration = 120
 
 export async function POST(request: NextRequest) {
   try {
-    const { analysis, primaryColor, modelConfig } = await request.json() as {
+    const { analysis, modelConfig } = await request.json() as {
       analysis: LectureAnalysis
-      primaryColor: string
       modelConfig?: ModelConfig
     }
 
-    const config: ModelConfig = modelConfig ?? { provider: 'claude', modelId: 'claude-sonnet-4-6' }
-    const palette = buildPalette(primaryColor)
-    const readable = await generateStreamWithAI(buildGeneratePrompt(analysis, palette), config)
+    if (!analysis) {
+      return new Response(
+        JSON.stringify({ error: '분석 데이터가 없습니다.' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      )
+    }
 
-    return new Response(readable, {
+    const config: ModelConfig = modelConfig ?? { provider: 'claude', modelId: 'claude-sonnet-4-6' }
+    const stream = await generateStreamWithAI(buildEvaluatePrompt(analysis), config)
+
+    return new Response(stream, {
       headers: {
         'Content-Type': 'text/plain; charset=utf-8',
         'Cache-Control': 'no-cache',
@@ -26,9 +30,9 @@ export async function POST(request: NextRequest) {
       },
     })
   } catch (err) {
-    console.error('[generate]', err)
+    console.error('[evaluate]', err)
     return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : '생성 실패' }),
+      JSON.stringify({ error: err instanceof Error ? err.message : '평가 실패' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     )
   }
