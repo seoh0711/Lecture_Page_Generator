@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export function middleware(req: NextRequest) {
   const basicAuth = req.headers.get('authorization');
-  const url = req.nextUrl;
 
   if (basicAuth) {
     const authValue = basicAuth.split(' ')[1];
@@ -13,10 +12,14 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  url.pathname = '/api/auth';
-  return NextResponse.rewrite(url);
+  return new NextResponse('Auth required', {
+    status: 401,
+    headers: {
+      'WWW-Authenticate': 'Basic realm="Secure Area"',
+    },
+  });
 }
 
 export const config = {
-  matcher: ['/((?!api/auth|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
